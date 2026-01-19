@@ -72,6 +72,12 @@ background-image:
     linear-gradient(to bottom, rgba(0, 255, 0, 0.05) 1px, transparent 1px);
 background-size: 20px 20px;
 }
+
+#syncStatus {
+    transition: all 0.3s ease;
+    opacity: 0;
+}
+#syncStatus.visible { opacity: 1; }
 </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden font-sans" oncontextmenu="return false;">
@@ -99,7 +105,23 @@ background-size: 20px 20px;
 <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">セキュリティトークン</label>
 <input type="password" id="loginToken" placeholder="********" class="w-full mt-1 px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:outline-none transition-all font-mono text-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-200">
 </div>
-<button onclick="handleLogin()" class="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-blue-200 transition-all transform hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3">
+<div id="room-creation-area" class="pt-4 border-t border-slate-100">
+<button onclick="showNotesModal()" class="w-full mb-4 whitespace-nowrap px-4 py-3 bg-white border border-red-200 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-all shadow-sm">KP向け諸注意</button>
+<label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">接続ルームID (Room Connection)</label>
+<div class="mt-1">
+<button onclick="createNewRoom()" class="w-full whitespace-nowrap px-4 py-3 bg-slate-800 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-700 transition-all shadow-lg shadow-slate-200">新規発行</button>
+</div>
+<p class="text-[9px] text-slate-400 mt-2 text-right font-mono" id="roomStatusText">※ ルーム未接続：ローカル保存モード</p>
+</div>
+<div id="room-connected-area" class="hidden pt-4 border-t border-slate-100 space-y-2">
+<button id="btn-session-notes" onclick="showNotesModal()" class="w-full px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all">セッション前の注意事項</button>
+<div class="grid grid-cols-2 gap-2">
+<button id="btn-ho1-entry" onclick="openHoEntryModal('HO1')" class="w-full px-4 py-3 bg-blue-50 border border-blue-100 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all">HO1記入事項</button>
+<button id="btn-ho2-entry" onclick="openHoEntryModal('HO2')" class="w-full px-4 py-3 bg-blue-50 border border-blue-100 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all">HO2記入事項</button>
+</div>
+<button onclick="showNotesModal('admin')" class="w-full px-4 py-3 bg-white border border-red-200 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 transition-all">KP確認事項</button>
+</div>
+<button id="loginBtn" onclick="handleLogin()" class="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-blue-200 transition-all transform hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3">
 端末アクセス <i data-lucide="chevron-right" class="w-4 h-4 text-white"></i>
 </button>
 </div>
@@ -328,19 +350,106 @@ background-size: 20px 20px;
 </div>
 </div>
 
+<!-- Notes Modal -->
+<div id="notesModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md hidden items-center justify-center z-50 transition-opacity opacity-0 text-left p-6">
+<div class="bg-white p-8 rounded-2xl shadow-2xl max-w-2xl w-full relative font-sans">
+<h3 class="text-lg font-black text-slate-800 mb-4">注意事項</h3>
+<div class="space-y-4 text-sm text-slate-600 max-h-[60vh] overflow-y-auto pr-4">
+<p>・このシステムはTRPG『シリウスコール』のセッション支援ツールです。</p>
+<p>・記載されている情報はすべて架空のものです。</p>
+<p>・ルームIDを発行してURLを共有することで、複数人でのデータ同期が可能です。</p>
+<p>・「うさぴよ」と検索すると隠し機能が有効になります。</p>
+</div>
+<div id="adminControls" class="hidden mt-6 pt-6 border-t border-slate-100">
+<h4 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">アクセス制御 (Access Control)</h4>
+<div class="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200">
+<div>
+<p class="text-sm font-bold text-slate-700">端末アクセス許可</p>
+<p class="text-[10px] text-slate-400 font-medium mt-0.5">ON: アクセス可能 / OFF: ロック中</p>
+</div>
+<button id="loginLockBtn" onclick="toggleLoginLock()" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 bg-slate-200"><span id="loginLockKnob" class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1"></span></button>
+</div>
+<p id="lockStatusText" class="text-[10px] font-black text-right mt-2 uppercase tracking-widest text-red-500">STATUS: LOCKED</p>
+</div>
+<div class="mt-6 text-right">
+<button onclick="hideNotesModal()" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold">閉じる</button>
+</div>
+</div>
+</div>
+
+<!-- HO Entry Modal -->
+<div id="hoEntryModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md hidden items-center justify-center z-50 transition-opacity opacity-0 text-left p-6">
+<div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full relative font-sans">
+<h3 class="text-lg font-black text-slate-800 mb-1" id="hoEntryTitle">HO記入事項</h3>
+<p class="text-xs text-slate-400 mb-6 font-bold uppercase tracking-widest">Character Data Entry</p>
+<div class="space-y-4">
+<div>
+<label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">氏名 (Name)</label>
+<input type="text" id="hoName" placeholder="例：愛染 太郎" class="w-full mt-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-all font-bold text-slate-700 placeholder-slate-300">
+</div>
+<div>
+<label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">ローマ字 (Romaji)</label>
+<input type="text" id="hoKana" placeholder="例：AIZEN TARO" class="w-full mt-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-all font-bold text-slate-700 placeholder-slate-300">
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">年齢 (Age)</label>
+<input type="text" id="hoAge" placeholder="例：26" class="w-full mt-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-all font-bold text-slate-700 placeholder-slate-300">
+</div>
+<div>
+<label class="text-[10px] font-black text-slate-400 uppercase tracking-widest">性別 (Gender)</label>
+<select id="hoGender" class="w-full mt-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-all font-bold text-slate-700">
+<option value="男性">男性</option>
+<option value="女性">女性</option>
+<option value="その他">その他</option>
+</select>
+</div>
+</div>
+</div>
+<div class="mt-8 flex justify-end gap-3">
+<button onclick="closeHoEntryModal()" class="px-4 py-2 text-slate-400 text-xs font-bold hover:text-slate-600 transition-colors">キャンセル</button>
+<button onclick="saveHoEntry()" class="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">入力完了</button>
+</div>
+</div>
+</div>
+
 <!-- Footer -->
 <footer class="bg-slate-800 text-slate-500 text-[9px] px-6 py-2.5 flex justify-between border-t border-slate-700 z-30 font-sans tracking-widest uppercase">
 <div class="flex gap-8">
 <span class="flex items-center gap-2"><i data-lucide="cpu" class="w-3 h-3 text-slate-600"></i> コア: TOKYO-MDC-04-A</span>
 <span class="font-bold text-green-500 italic">ネットワーク: 保護中</span>
 </div>
+<div id="syncStatus" class="px-3 py-0.5 bg-slate-900 rounded text-[9px] font-black text-blue-400 uppercase tracking-widest animate-pulse hidden">SYNCED</div>
 <div class="flex gap-8 font-black text-slate-500">
 <span>&copy; 2026 Aizen Medical Center</span>
 </div>
 </footer>
 
-<script>
+<script type="module">
 // --- DATA DEFS ---
+
+// ==========================================
+// FIREBASE CONFIGURATION (PLACEHOLDER)
+// ==========================================
+// 以下の設定値をFirebaseコンソールから取得したものに書き換えてください
+const firebaseConfig = {
+  apiKey: "AIzaSyBGbSg69Xtwu4IEiGa4GNdvWKymPzxQE1g",
+  authDomain: "siriuscall.firebaseapp.com",
+  projectId: "siriuscall",
+  storageBucket: "siriuscall.firebasestorage.app",
+  messagingSenderId: "6849095448",
+  appId: "1:6849095448:web:9df7797adb54dfc570606d",
+  measurementId: "G-NMYKS59C5J"
+};
+// ==========================================
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+let app, db;
+let roomId = null;
+let isFirebaseReady = false;
+
 const auditLogData = {
 soap: [ { time: "01/18 02:25", user: "ADMIN", action: "診療録(Ver.1) 論理削除：入力誤りによる訂正" }, { time: "01/18 02:30", user: "ADMIN", action: "診療録(Ver.2) 修正確定" } ],
 orders: [ { time: "01/18 02:45", user: "ADMIN", action: "緊急指示履歴 秘匿処理" } ],
@@ -350,7 +459,7 @@ documents: [ { time: "01/18 04:05", user: "ADMIN", action: "緊急処置記録 �
 info: [ { time: "01/18 09:10", user: "医事課", action: "属性更新" } ]
 };
 
-const patientsDb = {
+const initialPatientsDb = {
 フリガナ: {
 id: "A-0089-SC", name: "HO1の名前", en: "フリガナ", age: "年齢", gender: "性別", dept: "心臓血管外科 / 主任医長", type: "employee",
 hasHistory: false, v1_enabled: true, status: 'normal',
@@ -1090,6 +1199,9 @@ v2: {
 }
 };
 
+// Initialize working DB from initial data
+let patientsDb = JSON.parse(JSON.stringify(initialPatientsDb));
+
 // --- GLOBAL STATE ---
 let currentPatient = null;
 let currentVersion = 2;
@@ -1099,12 +1211,26 @@ let asukaPhase = 0; // 0=Trauma, 1=Cardiac, 2=Success, 3=Failure
 let kokoroPhase = 0; // 0=Normal, 1=Emergency, 2=PostOp, 3=Exitus
 let currentPage = 1;
 let isGodMode = false;
+let isLoginEnabled = false;
 const page2Targets = ['p2_01', 'p2_02', 'p2_03', 'p2_04', 'p2_05', 'p2_06']; // 指定したカルテ(key)をここに追加
 
-// --- LocalStorage Persistence ---
-function saveState() {
+// --- Persistence & Sync ---
+function showSyncStatus(msg) {
+    const el = document.getElementById('syncStatus');
+    if(el) {
+        el.innerText = msg;
+        el.classList.remove('hidden');
+        el.classList.add('visible');
+        if(msg === 'SYNCED') {
+            setTimeout(() => { el.classList.add('hidden'); }, 2000);
+        }
+    }
+}
+
+async function saveState() {
     try {
         const state = {
+            // Save only necessary data
             patientsDb: patientsDb,
             currentPatientId: currentPatient ? currentPatient.id : null,
             currentVersion: currentVersion,
@@ -1113,16 +1239,76 @@ function saveState() {
             asukaPhase: asukaPhase,
             kokoroPhase: kokoroPhase,
             currentPage: currentPage,
+            isLoginEnabled: isLoginEnabled,
             isGodMode: isGodMode
         };
-        localStorage.setItem('emrState', JSON.stringify(state));
+
+        if (roomId && isFirebaseReady) {
+            showSyncStatus("SAVING...");
+            // Save to Firestore: rooms/{roomId}/data/appState
+            await setDoc(doc(db, "rooms", roomId, "data", "appState"), state);
+            showSyncStatus("SYNCED");
+        } else {
+            // Fallback to LocalStorage
+            localStorage.setItem('emrState', JSON.stringify(state));
+        }
     } catch (e) {
-        console.error("Failed to save state to localStorage", e);
+        console.error("Failed to save state", e);
         showToast("エラー: データの保存に失敗しました。");
     }
 }
 
-function loadState() {
+function applyState(state) {
+    if (!state) return;
+    
+    // 1. Restore Data
+    if (state.patientsDb) {
+        patientsDb = state.patientsDb;
+    }
+
+    // 2. Restore UI State
+    if (state.currentVersion !== undefined) currentVersion = state.currentVersion;
+    if (state.activeDetailTab !== undefined) activeDetailTab = state.activeDetailTab;
+    if (state.isUnlocked !== undefined) isUnlocked = state.isUnlocked;
+    if (state.asukaPhase !== undefined) asukaPhase = state.asukaPhase;
+    if (state.kokoroPhase !== undefined) kokoroPhase = state.kokoroPhase;
+    if (state.currentPage !== undefined) currentPage = state.currentPage;
+    if (state.isGodMode !== undefined) isGodMode = state.isGodMode;
+    if (state.isLoginEnabled !== undefined) { isLoginEnabled = state.isLoginEnabled; updateLockUI(); }
+
+    // 3. Restore Navigation
+    if (state.currentPatientId) {
+        const key = Object.keys(patientsDb).find(k => patientsDb[k].id === state.currentPatientId);
+        if (key) {
+            currentPatient = patientsDb[key];
+            // Force navigation to detail if not already there or if patient changed
+            const detailScreen = document.getElementById('screen-detail');
+            if (!detailScreen.classList.contains('active') || (currentPatient && currentPatient.id !== state.currentPatientId)) {
+                navigateTo('screen-detail'); 
+            }
+            renderSidebar();
+            updateAllDetailViews();
+        }
+    } else {
+        // If no patient selected, ensure we are on list (or login)
+        const loginScreen = document.getElementById('screen-login');
+        if (!loginScreen.classList.contains('active')) {
+             navigateTo('screen-list');
+        }
+        currentPatient = null;
+    }
+    
+    // Refresh List if active
+    const listScreen = document.getElementById('screen-list');
+    if (listScreen.classList.contains('active')) {
+        renderPatientList();
+    }
+    
+    updatePaginationButtons();
+    updateLoginButtons();
+}
+
+function loadLocalState() {
     try {
         const savedState = localStorage.getItem('emrState');
         if (savedState) {
@@ -1139,12 +1325,14 @@ function loadState() {
             kokoroPhase = state.kokoroPhase || 0;
             currentPage = state.currentPage || 1;
             isGodMode = state.isGodMode || false;
+            isLoginEnabled = state.isLoginEnabled !== undefined ? state.isLoginEnabled : false;
             
+            updateLoginButtons();
             showToast("保存されたセッションを復元しました。");
         }
     } catch (e) {
         console.error("Failed to load state from localStorage", e);
-        localStorage.removeItem('emrState'); // 破損したデータを削除
+        localStorage.removeItem('emrState');
         showToast("エラー: 保存データの読み込みに失敗しました。");
     }
 }
@@ -1275,9 +1463,19 @@ function playSound(type) {
     }
 }
 
+function createNewRoom() {
+    const newId = Math.random().toString(36).substring(2, 10).toUpperCase();
+    window.location.search = `?room=${newId}`;
+}
+
 function handleLogin() {
     const idVal = document.getElementById('loginId').value;
     const tokenVal = document.getElementById('loginToken').value;
+
+    if (!isLoginEnabled) {
+        showToast("ACCESS DENIED: 端末はセッション開始までロックされています");
+        return;
+    }
 
     if (idVal.length > 0 && idVal.length !== 4) {
         showToast("LOGIN ERROR: IDは4桁の数字を入力してください");
@@ -1288,9 +1486,11 @@ function handleLogin() {
         return;
     }
     console.log(`LOGIN SUCCESS: AMC-${idVal}`);
+    const notesBtn = document.getElementById('btn-session-notes');
+    if (notesBtn) notesBtn.style.display = 'none';
     initAudio();
     playSound('startup');
-    const btn = document.querySelector('#screen-login button');
+    const btn = document.getElementById('loginBtn');
     if(btn) {
         btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> ACCESSING...`;
         lucide.createIcons();
@@ -1313,7 +1513,14 @@ document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
 const target = document.getElementById(screenId);
 if (target) {
 target.classList.add('active');
+if (screenId === 'screen-login') {
+    const btn = document.getElementById('loginBtn');
+    if(btn) {
+        btn.innerHTML = `端末アクセス <i data-lucide="chevron-right" class="w-4 h-4 text-white"></i>`;
+    }
+}
 if (screenId === 'screen-list') renderPatientList();
+if (screenId === 'screen-list') currentPatient = null; // Clear selection for sync
 lucide.createIcons();
 if (screenId === 'screen-detail') setTimeout(initEcg, 100);
 }
@@ -1551,25 +1758,25 @@ document.getElementById('patientDetailBanner').innerHTML = `
 const toggleArea = document.getElementById('versionToggleArea');
 if (p.id === 'K-3341-DA' && (isGodMode || p.status !== 'normal' || asukaPhase > 0)) {
 let finalBtn = "";
-if (p.status === 'exitus') finalBtn = `<button onclick="asukaPhase=3;updateAllDetailViews();" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===3?'bg-slate-900 text-white shadow-md':'text-slate-400'} uppercase">術中死</button>`;
-else if (p.status === 'post_op') finalBtn = `<button onclick="asukaPhase=2;updateAllDetailViews();" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===2?'bg-green-600 text-white shadow-md':'text-slate-400'} uppercase">術後</button>`;
+if (p.status === 'exitus') finalBtn = `<button onclick="window.setAsukaPhase(3)" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===3?'bg-slate-900 text-white shadow-md':'text-slate-400'} uppercase">術中死</button>`;
+else if (p.status === 'post_op') finalBtn = `<button onclick="window.setAsukaPhase(2)" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===2?'bg-green-600 text-white shadow-md':'text-slate-400'} uppercase">術後</button>`;
 
 if (isGodMode) {
-    toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner font-sans"><button onclick="asukaPhase=3;updateAllDetailViews();" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===3?'bg-slate-900 text-white shadow-md':'text-slate-400'} uppercase">術中死</button><button onclick="asukaPhase=2;updateAllDetailViews();" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===2?'bg-green-600 text-white shadow-md':'text-slate-400'} uppercase">術後</button><button onclick="asukaPhase=1;updateAllDetailViews();" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===1?'bg-blue-600 text-white shadow-md':'text-slate-400'} uppercase">術前</button><button onclick="asukaPhase=0;updateAllDetailViews();" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===0?'bg-white text-slate-600 shadow-md':'text-slate-400'} uppercase">初期</button></div>`;
+    toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner font-sans"><button onclick="window.setAsukaPhase(3)" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===3?'bg-slate-900 text-white shadow-md':'text-slate-400'} uppercase">術中死</button><button onclick="window.setAsukaPhase(2)" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===2?'bg-green-600 text-white shadow-md':'text-slate-400'} uppercase">術後</button><button onclick="window.setAsukaPhase(1)" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===1?'bg-blue-600 text-white shadow-md':'text-slate-400'} uppercase">術前</button><button onclick="window.setAsukaPhase(0)" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===0?'bg-white text-slate-600 shadow-md':'text-slate-400'} uppercase">初期</button></div>`;
 } else {
-    toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner font-sans">${finalBtn}<button onclick="asukaPhase=1;updateAllDetailViews();" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===1?'bg-blue-600 text-white shadow-md':'text-slate-400'} uppercase">術前</button><button onclick="asukaPhase=0;updateAllDetailViews();" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===0?'bg-white text-slate-600 shadow-md':'text-slate-400'} uppercase">初期</button></div>`;
+    toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner font-sans">${finalBtn}<button onclick="window.setAsukaPhase(1)" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===1?'bg-blue-600 text-white shadow-md':'text-slate-400'} uppercase">術前</button><button onclick="window.setAsukaPhase(0)" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${asukaPhase===0?'bg-white text-slate-600 shadow-md':'text-slate-400'} uppercase">初期</button></div>`;
 }
 } else if (p.v1_enabled) {
 toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner"><button onclick="setVersion(2)" class="ver-btn-2 px-8 py-2 rounded-lg text-xs font-black transition-all ${currentVersion===2?'bg-white text-blue-600 shadow-md':'text-slate-400'} uppercase">VER 2.0</button><button onclick="setVersion(1)" class="ver-btn-1 px-8 py-2 rounded-lg text-xs font-black transition-all ${currentVersion===1?'bg-red-600 text-white shadow-lg':'text-slate-400 italic'} uppercase"><i data-lucide="lock" class="w-3 h-3 mr-1"></i> VER 1.0 (SEC)</button></div>`;
 } else if (p.id === 'A-8812-KC' && (isGodMode || p.status !== 'normal' || kokoroPhase > 0)) {
 let finalBtn = "";
-if (p.status === 'post_op') finalBtn = `<button onclick="kokoroPhase=2;updateAllDetailViews();" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===2?'bg-green-600 text-white shadow-md':'text-slate-400'} uppercase">術後</button>`;
-else if (p.status === 'exitus') finalBtn = `<button onclick="kokoroPhase=3;updateAllDetailViews();" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===3?'bg-slate-900 text-white shadow-md':'text-slate-400'} uppercase">術中死</button>`;
+if (p.status === 'post_op') finalBtn = `<button onclick="window.setKokoroPhase(2)" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===2?'bg-green-600 text-white shadow-md':'text-slate-400'} uppercase">術後</button>`;
+else if (p.status === 'exitus') finalBtn = `<button onclick="window.setKokoroPhase(3)" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===3?'bg-slate-900 text-white shadow-md':'text-slate-400'} uppercase">術中死</button>`;
 
 if (isGodMode) {
-    toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner font-sans"><button onclick="kokoroPhase=3;updateAllDetailViews();" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===3?'bg-slate-900 text-white shadow-md':'text-slate-400'} uppercase">術中死</button><button onclick="kokoroPhase=2;updateAllDetailViews();" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===2?'bg-green-600 text-white shadow-md':'text-slate-400'} uppercase">術後</button><button onclick="kokoroPhase=1;updateAllDetailViews();" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===1?'bg-red-600 text-white shadow-md animate-pulse':'text-slate-400'} uppercase">緊急</button><button onclick="kokoroPhase=0;updateAllDetailViews();" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===0?'bg-white text-slate-600 shadow-md':'text-slate-400'} uppercase">初期</button></div>`;
+    toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner font-sans"><button onclick="window.setKokoroPhase(3)" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===3?'bg-slate-900 text-white shadow-md':'text-slate-400'} uppercase">術中死</button><button onclick="window.setKokoroPhase(2)" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===2?'bg-green-600 text-white shadow-md':'text-slate-400'} uppercase">術後</button><button onclick="window.setKokoroPhase(1)" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===1?'bg-red-600 text-white shadow-md animate-pulse':'text-slate-400'} uppercase">緊急</button><button onclick="window.setKokoroPhase(0)" class="px-3 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===0?'bg-white text-slate-600 shadow-md':'text-slate-400'} uppercase">初期</button></div>`;
 } else {
-    toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner font-sans">${finalBtn}<button onclick="kokoroPhase=1;updateAllDetailViews();" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===1?'bg-red-600 text-white shadow-md animate-pulse':'text-slate-400'} uppercase">緊急</button><button onclick="kokoroPhase=0;updateAllDetailViews();" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===0?'bg-white text-slate-600 shadow-md':'text-slate-400'} uppercase">初期</button></div>`;
+    toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner font-sans">${finalBtn}<button onclick="window.setKokoroPhase(1)" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===1?'bg-red-600 text-white shadow-md animate-pulse':'text-slate-400'} uppercase">緊急</button><button onclick="window.setKokoroPhase(0)" class="px-6 py-2 rounded-lg text-[10px] font-black transition-all ${kokoroPhase===0?'bg-white text-slate-600 shadow-md':'text-slate-400'} uppercase">初期</button></div>`;
 }
 } else if (p.v1_enabled) {
 toggleArea.innerHTML = `<div class="flex bg-slate-200 p-1 rounded-xl shadow-inner"><button onclick="setVersion(2)" class="ver-btn-2 px-8 py-2 rounded-lg text-xs font-black transition-all ${currentVersion===2?'bg-white text-blue-600 shadow-md':'text-slate-400'} uppercase">VER 2.0</button><button onclick="setVersion(1)" class="ver-btn-1 px-8 py-2 rounded-lg text-xs font-black transition-all ${currentVersion===1?'bg-red-600 text-white shadow-lg':'text-slate-400 italic'} uppercase"><i data-lucide="lock" class="w-3 h-3 mr-1"></i> VER 1.0 (SEC)</button></div>`;
@@ -1871,6 +2078,156 @@ document.getElementById('pwErrorMsg').classList.remove('hidden'); document.getEl
 }
 }
 
+function showNotesModal(mode = 'normal') {
+    const modal = document.getElementById('notesModal');
+    const adminControls = document.getElementById('adminControls');
+    
+    if (mode === 'admin') {
+        adminControls.classList.remove('hidden');
+        updateLockUI();
+    } else {
+        adminControls.classList.add('hidden');
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(() => { modal.classList.remove('opacity-0'); modal.classList.add('opacity-100'); }, 10);
+}
+
+function hideNotesModal() {
+    const modal = document.getElementById('notesModal');
+    modal.classList.remove('opacity-100');
+    modal.classList.add('opacity-0');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+}
+
+function toggleLoginLock() {
+    isLoginEnabled = !isLoginEnabled;
+    updateLockUI();
+    saveState();
+    showToast(isLoginEnabled ? "ACCESS UNLOCKED" : "ACCESS LOCKED");
+}
+
+function updateLockUI() {
+    const btn = document.getElementById('loginLockBtn');
+    const knob = document.getElementById('loginLockKnob');
+    const text = document.getElementById('lockStatusText');
+    
+    if (!btn || !knob || !text) return;
+    
+    if (isLoginEnabled) {
+        btn.classList.remove('bg-slate-200');
+        btn.classList.add('bg-blue-600');
+        knob.classList.remove('translate-x-1');
+        knob.classList.add('translate-x-6');
+        text.innerText = "STATUS: UNLOCKED (ACCESS GRANTED)";
+        text.className = "text-[10px] font-black text-right mt-2 uppercase tracking-widest text-blue-500";
+    } else {
+        btn.classList.remove('bg-blue-600');
+        btn.classList.add('bg-slate-200');
+        knob.classList.remove('translate-x-6');
+        knob.classList.add('translate-x-1');
+        text.innerText = "STATUS: LOCKED (ACCESS DENIED)";
+        text.className = "text-[10px] font-black text-right mt-2 uppercase tracking-widest text-red-500";
+    }
+}
+
+function quickAccessHO2() {
+    if (!patientsDb.ho2) {
+        patientsDb.ho2 = {
+            id: "HO-0002-XX", name: "HO2の名前", en: "フリガナ", age: "年齢", gender: "性別", dept: "心臓血管外科 / 主任医長", type: "employee",
+            hasHistory: false, v1_enabled: false, status: 'normal',
+            v2: {
+                nursingAssessment: { complaint: "（意識消失中につき聴取不能）", need: "意識レベルの回復、循環動態の安定化、SCTS根治術に向けた準備。", hope: "---", family: "（連絡中）" },
+                soap: { s: "（本人意識消失につき聴取不能）\n発見者（職員）：「業務中に突然胸を押さえてうずくまり、そのまま倒れた。呼びかけに反応がなかった」\n院内発生のため、直ちにストレッチャーにてER搬入。", o: "【来院時所見】\nJCS 200 (半昏睡)。痛み刺激に対し逃避反射あり。\nBP 88/56, HR 112 (Sinus Tachy), SpO2 92% (O2 10L Mask)。冷汗著明。\n【検査所見】\n12誘導心電図：V1-V4 ST低下。\n造影CT：冠動脈の螺旋状変形（SCTS）を認める。中期進行像。LADおよびRCAが心筋内に深く埋没しており、高度な圧排を受けている。\n心エコー：前壁中隔の壁運動低下 (Hypokinesis)。", a: "1. 螺旋冠状動脈変性症 (SCTS) - 中期進行 (Stage II)\n2. 心原性失神 (Cardiogenic Syncope)\n3. 不安定狭心症\n冠動脈の心筋内埋没による虚血発作。根治には外科的手術（冠動脈形成＋心筋切除）が必須。", p: "ICU入院。鎮静・挿管管理下にて循環動態安定化を図る。緊急手術の適応判断（家族到着待ち）。" },
+                vitals: [ {time:"10:30", bp:"92/60", hr:"105", spo2:"98", bt:"36.2", mews:"3", trend:"→", user:"ICU-RN"}, {time:"10:00", bp:"88/56", hr:"112", spo2:"94", bt:"36.0", mews:"3", trend:"↓", user:"ER-RN"}, {time:"09:45", bp:"80/50", hr:"120", spo2:"90", bt:"35.8", mews:"3", trend:"↓", user:"救急隊"} ],
+                orders: [ {id:"ORD-HO2-01", time:"09:50", type:"Stat", content:"全身造影CT (心臓重点)", status:"Done", user:"救急医"}, {id:"ORD-HO2-02", time:"10:10", type:"Stat", content:"ICU入室・人工呼吸管理", status:"Active", user:"循環器医"}, {id:"ORD-HO2-03", time:"10:15", type:"Stat", content:"緊急手術準備 (SCTS根治術)", status:"Prep", user:"心外主任"} ],
+                nursing: [ {time:"09:45", shift:"日勤", focus:"急変", title:"院内急変", content:"業務中に倒れているところを発見。JCS 200。直ちにERへ搬送。", user:"外来RN"}, {time:"10:15", shift:"日勤", focus:"転入", title:"ICU入室", content:"SCTSの診断。意識戻らず。挿管管理中。モニター監視強化。", user:"ICU-RN"} ],
+                docs: [ {date:"2026/01/18", type:"緊急", title:"緊急入院診療計画書", status:"作成済"} ],
+                footer: {date:"2026/01/18 10:30", tag:"緊急入院・意識障害"}
+            }
+        };
+        showToast("新規カルテ登録: HO2");
+        saveState();
+    }
+    navigateToDetail('ho2');
+}
+
+let currentEditingHo = null;
+
+function openHoEntryModal(hoType) {
+    currentEditingHo = hoType;
+    const modal = document.getElementById('hoEntryModal');
+    const title = document.getElementById('hoEntryTitle');
+    
+    // Ensure data exists
+    if (hoType === 'HO2' && !patientsDb.ho2) {
+        patientsDb.ho2 = {
+            id: "HO-0002-XX", name: "HO2の名前", en: "フリガナ", age: "年齢", gender: "性別", dept: "心臓血管外科 / 主任医長", type: "employee",
+            hasHistory: false, v1_enabled: false, status: 'normal',
+            v2: {
+                nursingAssessment: { complaint: "（意識消失中につき聴取不能）", need: "意識レベルの回復、循環動態の安定化、SCTS根治術に向けた準備。", hope: "---", family: "（連絡中）" },
+                soap: { s: "（本人意識消失につき聴取不能）\n発見者（職員）：「業務中に突然胸を押さえてうずくまり、そのまま倒れた。呼びかけに反応がなかった」\n院内発生のため、直ちにストレッチャーにてER搬入。", o: "【来院時所見】\nJCS 200 (半昏睡)。痛み刺激に対し逃避反射あり。\nBP 88/56, HR 112 (Sinus Tachy), SpO2 92% (O2 10L Mask)。冷汗著明。\n【検査所見】\n12誘導心電図：V1-V4 ST低下。\n造影CT：冠動脈の螺旋状変形（SCTS）を認める。中期進行像。LADおよびRCAが心筋内に深く埋没しており、高度な圧排を受けている。\n心エコー：前壁中隔の壁運動低下 (Hypokinesis)。", a: "1. 螺旋冠状動脈変性症 (SCTS) - 中期進行 (Stage II)\n2. 心原性失神 (Cardiogenic Syncope)\n3. 不安定狭心症\n冠動脈の心筋内埋没による虚血発作。根治には外科的手術（冠動脈形成＋心筋切除）が必須。", p: "ICU入院。鎮静・挿管管理下にて循環動態安定化を図る。緊急手術の適応判断（家族到着待ち）。" },
+                vitals: [ {time:"10:30", bp:"92/60", hr:"105", spo2:"98", bt:"36.2", mews:"3", trend:"→", user:"ICU-RN"}, {time:"10:00", bp:"88/56", hr:"112", spo2:"94", bt:"36.0", mews:"3", trend:"↓", user:"ER-RN"}, {time:"09:45", bp:"80/50", hr:"120", spo2:"90", bt:"35.8", mews:"3", trend:"↓", user:"救急隊"} ],
+                orders: [ {id:"ORD-HO2-01", time:"09:50", type:"Stat", content:"全身造影CT (心臓重点)", status:"Done", user:"救急医"}, {id:"ORD-HO2-02", time:"10:10", type:"Stat", content:"ICU入室・人工呼吸管理", status:"Active", user:"循環器医"}, {id:"ORD-HO2-03", time:"10:15", type:"Stat", content:"緊急手術準備 (SCTS根治術)", status:"Prep", user:"心外主任"} ],
+                nursing: [ {time:"09:45", shift:"日勤", focus:"急変", title:"院内急変", content:"業務中に倒れているところを発見。JCS 200。直ちにERへ搬送。", user:"外来RN"}, {time:"10:15", shift:"日勤", focus:"転入", title:"ICU入室", content:"SCTSの診断。意識戻らず。挿管管理中。モニター監視強化。", user:"ICU-RN"} ],
+                docs: [ {date:"2026/01/18", type:"緊急", title:"緊急入院診療計画書", status:"作成済"} ],
+                footer: {date:"2026/01/18 10:30", tag:"緊急入院・意識障害"}
+            }
+        };
+    }
+
+    const p = hoType === 'HO1' ? patientsDb['フリガナ'] : patientsDb.ho2;
+    
+    title.innerText = `${hoType} 記入事項`;
+    document.getElementById('hoName').value = (p.name === 'HO1の名前' || p.name === 'HO2の名前') ? '' : p.name;
+    document.getElementById('hoKana').value = (p.en === 'フリガナ') ? '' : p.en;
+    document.getElementById('hoAge').value = (p.age === '年齢') ? '' : p.age;
+    document.getElementById('hoGender').value = (p.gender === '性別') ? '男性' : p.gender;
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    setTimeout(() => { modal.classList.remove('opacity-0'); modal.classList.add('opacity-100'); }, 10);
+}
+
+function closeHoEntryModal() {
+    const modal = document.getElementById('hoEntryModal');
+    modal.classList.remove('opacity-100');
+    modal.classList.add('opacity-0');
+    setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+}
+
+function saveHoEntry() {
+    const name = document.getElementById('hoName').value;
+    const kana = document.getElementById('hoKana').value;
+    const age = document.getElementById('hoAge').value;
+    const gender = document.getElementById('hoGender').value;
+
+    if (!name || !kana || !age) {
+        showToast("全ての項目を入力してください");
+        return;
+    }
+
+    const p = currentEditingHo === 'HO1' ? patientsDb['フリガナ'] : patientsDb.ho2;
+    p.name = name;
+    p.en = kana;
+    p.age = age;
+    p.gender = gender;
+    p.entryCompleted = true;
+
+    saveState();
+    updateLoginButtons();
+    closeHoEntryModal();
+    showToast(`${currentEditingHo} 情報を更新しました`);
+}
+
+function updateLoginButtons() {
+    const btn1 = document.getElementById('btn-ho1-entry');
+    const btn2 = document.getElementById('btn-ho2-entry');
+    if (btn1) btn1.style.display = (patientsDb['フリガナ'] && patientsDb['フリガナ'].entryCompleted) ? 'none' : 'block';
+    if (btn2) btn2.style.display = (patientsDb.ho2 && patientsDb.ho2.entryCompleted) ? 'none' : 'block';
+}
+
 function switchAsukaMode(pPhase) {
 asukaPhase = pPhase;
 activeDetailTab = (pPhase === 0) ? 'info' : 'soap';
@@ -1938,11 +2295,25 @@ const activateGodMode = () => {
     saveState();
 };
 
-const handleSearchCommand = (e) => {
+const handleSearchCommand = async (e) => {
 const val = e.target.value;
 if (val === 'リセット') {
-    localStorage.removeItem('emrState');
-    showToast("SYSTEM RESET: LOCAL STORAGE CLEARED");
+    if (roomId && isFirebaseReady) {
+        patientsDb = JSON.parse(JSON.stringify(initialPatientsDb));
+        currentPatient = null;
+        currentVersion = 2;
+        activeDetailTab = 'soap';
+        isUnlocked = false;
+        asukaPhase = 0;
+        kokoroPhase = 0;
+        currentPage = 1;
+        isGodMode = false;
+        await saveState();
+        showToast("SYSTEM RESET: REMOTE DATA INITIALIZED");
+    } else {
+        localStorage.removeItem('emrState');
+        showToast("SYSTEM RESET: LOCAL STORAGE CLEARED");
+    }
     setTimeout(() => location.reload(), 1000);
     e.target.value = "";
     return;
@@ -1987,20 +2358,87 @@ showToast("REFRESHING CLINICAL DATA... SUCCESS."); renderSidebar(); updateAllDet
 saveState();
 };
 
-window.onload = () => {
-loadState();
+// --- INITIALIZATION ---
+async function initApp() {
+    // Check URL for Room ID
+    const urlParams = new URLSearchParams(window.location.search);
+    roomId = urlParams.get('room');
+
+    const roomStatus = document.getElementById('roomStatusText');
+
+    if (roomId) {
+        // FIREBASE MODE
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            isFirebaseReady = true;
+
+            // URLでルームIDが指定されている場合は接続エリアを切り替える
+            const creationArea = document.getElementById('room-creation-area');
+            const connectedArea = document.getElementById('room-connected-area');
+            if (creationArea) creationArea.style.display = 'none';
+            if (connectedArea) connectedArea.classList.remove('hidden');
+
+            const docRef = doc(db, "rooms", roomId, "data", "appState");
+            
+            // Initial Fetch
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                applyState(data);
+                showToast(`ROOM CONNECTED: ${roomId}`);
+            } else {
+                // Initialize Room with default data
+                console.log("Initializing new room...");
+                await saveState(); // Saves current (default) state to Firestore
+                showToast(`NEW ROOM CREATED: ${roomId}`);
+            }
+
+            // Realtime Listener
+            onSnapshot(docRef, (doc) => {
+                if (doc.exists()) {
+                    // Apply external updates
+                    const data = doc.data();
+                    // Avoid overwriting if we just saved (simple check could be added, but applying is safe)
+                    applyState(data);
+                }
+            });
+
+        } catch (e) {
+            console.error("Firebase Init Error:", e);
+            showToast("SYSTEM ERROR: FIREBASE CONNECTION FAILED");
+        }
+    } else {
+        // LOCAL MODE
+        loadLocalState();
+    }
+
 const dSearch = document.getElementById('detailSearch');
 if (dSearch) dSearch.addEventListener('input', handleSearchCommand);
 
 // Main search listener to add patients
 const mSearch = document.getElementById('mainSearch');
 if (mSearch) {
-    mSearch.addEventListener('keypress', (e) => {
+    mSearch.addEventListener('keypress', async (e) => {
         if (e.key === 'Enter') {
             const val = e.target.value.trim();
             if (val === 'リセット') {
-                localStorage.removeItem('emrState');
-                showToast("SYSTEM RESET: LOCAL STORAGE CLEARED");
+                if (roomId && isFirebaseReady) {
+                    patientsDb = JSON.parse(JSON.stringify(initialPatientsDb));
+                    currentPatient = null;
+                    currentVersion = 2;
+                    activeDetailTab = 'soap';
+                    isUnlocked = false;
+                    asukaPhase = 0;
+                    kokoroPhase = 0;
+                    currentPage = 1;
+                    isGodMode = false;
+                    await saveState();
+                    showToast("SYSTEM RESET: REMOTE DATA INITIALIZED");
+                } else {
+                    localStorage.removeItem('emrState');
+                    showToast("SYSTEM RESET: LOCAL STORAGE CLEARED");
+                }
                 setTimeout(() => location.reload(), 1000);
                 e.target.value = "";
                 return;
@@ -2099,6 +2537,33 @@ if (mSearch) {
 
 lucide.createIcons();
 };
+
+// --- EXPOSE TO WINDOW ---
+window.createNewRoom = createNewRoom;
+window.handleLogin = handleLogin;
+window.navigateTo = navigateTo;
+window.navigateToDetail = navigateToDetail;
+window.setPage = setPage;
+window.switchDetailTab = switchDetailTab;
+window.setVersion = setVersion;
+window.showAuthModal = showAuthModal;
+window.cancelAuth = cancelAuth;
+window.submitAuth = submitAuth;
+window.toggleAuditLog = toggleAuditLog;
+window.setAsukaPhase = (val) => { asukaPhase = val; updateAllDetailViews(); saveState(); };
+window.setKokoroPhase = (val) => { kokoroPhase = val; updateAllDetailViews(); saveState(); };
+window.showNotesModal = showNotesModal;
+window.hideNotesModal = hideNotesModal;
+window.toggleLoginLock = toggleLoginLock;
+window.updateLockUI = updateLockUI;
+window.quickAccessHO2 = quickAccessHO2;
+window.openHoEntryModal = openHoEntryModal;
+window.closeHoEntryModal = closeHoEntryModal;
+window.saveHoEntry = saveHoEntry;
+
+// Start App
+initApp();
+
 </script>
 </body>
 </html>
